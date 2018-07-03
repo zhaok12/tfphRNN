@@ -380,8 +380,8 @@ def train_early_stopping(mini_batch_size, X_train, y_train, X_test, y_test, tim_
 
 def train():
     # Loading the data
-    friendship = pd.read_csv('../../../dataset/friendship.csv', header=None)
-    with open('../../../dataset/traj_data.pkl', 'rb') as f:
+    friendship = pd.read_csv('../data/friendship.csv', header=None)
+    with open('../data/traj_data.pkl', 'rb') as f:
         data = pickle.load(f)
     data_df = []
     for i in range(friendship.shape[0]):
@@ -390,7 +390,7 @@ def train():
         data_df.append([[data[user_id1], data[user_id2]], friendship.iloc[i, 2]])
     data_df = pd.DataFrame(data_df, columns=['tokens', 'rating'])
 
-    # d = pd.read_json('../../../dataset/imdb_final.json')
+    # d = pd.read_json('../data/imdb_final.json')
     # d['rating'] = d['rating'] - 1
     # d = d[['tokens', 'rating']]
 
