@@ -439,7 +439,7 @@ def train_data(mini_batch, seq_week, targets, tim_attn_model, week_attn_model,
     week_optimizer.step()
     mlp_optimizer.step()
 
-    return loss.data[0]
+    return loss.item()
 
 
 # Training
