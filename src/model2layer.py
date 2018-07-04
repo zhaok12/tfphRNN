@@ -146,7 +146,7 @@ class AttentionWeekRNN(nn.Module):
 
     def forward(self, week_seq, week_vec, state_week):
         # embeddings
-        embedded_week = self.lookup_week(week_seq.long())
+        embedded_week = self.lookup_week(week_seq.long().cuda())
         # not sure of the dim
         embedded = torch.cat((embedded_week, week_vec), dim=2)
 
@@ -386,7 +386,7 @@ def check_val_loss(val_tokens, val_labels, mini_batch_size, tim_attn_model,
             y_pred.cuda(),
             Variable(torch.from_numpy(label),
                      requires_grad=False).float().cuda())
-        val_loss.append(loss.data[0])
+        val_loss.append(loss.item())
 
     return np.mean(val_loss)
 
