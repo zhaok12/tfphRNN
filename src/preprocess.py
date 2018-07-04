@@ -18,7 +18,7 @@ def read_dict(_dict, k):
 
 
 def change_format():
-    with open('../../../dataset/TRAJ-1.pkl', 'rb') as f:
+    with open('../data/TRAJ-1.pkl', 'rb') as f:
         data = pickle.load(f)
 
     # friendship
@@ -50,7 +50,7 @@ def change_format():
     negative_df = pd.DataFrame(negative, columns=['user1', 'user2', 'friend'])
 
     merge_df = pd.concat([friendship_df, negative_df], axis=0)
-    merge_df.sort_values(by=['user1', 'friend']).to_csv('../../../dataset/friendship.csv', header=False, index=False)
+    merge_df.sort_values(by=['user1', 'friend']).to_csv('../data/friendship.csv', header=False, index=False)
 
     # trajectory
     traj_data = {}
@@ -60,12 +60,12 @@ def change_format():
             for week in traj_data[user].keys():
                 traj_data[user][week] = traj_data[user][week]
 
-    with open('../../../dataset/traj_data.pkl', 'wb') as f:
+    with open('../data/traj_data.pkl', 'wb') as f:
         pickle.dump(traj_data, f)
 
 
 def count():
-    with open('../../../dataset/traj_data.pkl', 'rb') as f:
+    with open('../data/traj_data.pkl', 'rb') as f:
         traj_data = pickle.load(f)
     users = []
     weeks = []
