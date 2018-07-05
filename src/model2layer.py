@@ -192,7 +192,7 @@ class MLPNet(nn.Module):
         return out
 
 
-# Functions to accomplish attention
+# ********************************** Functions to accomplish attention ************************************
 def batch_matmul_bias(seq, weight, bias, nonlinearity=''):
     s = None
     bias_dim = bias.size()
@@ -248,35 +248,29 @@ def attention_mul(rnn_outputs, att_weights):
     return torch.sum(attn_vectors, 0)
 
 
-def get_predictions(val_tokens, seq_week, tim_attn_model, week_attn_model,
-                    mlp_model):
-    state_tim = tim_attn_model.init_hidden().cuda()
-    state_week = week_attn_model.init_hidden().cuda()
-    _, max_weeks, _, batch_size, max_tims = val_tokens.size()
+# ********************************** Functions to accomplish attention ************************************
 
-    y_preds = []
-    state_weeks = []
+def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
+    assert inputs.shape[0] == targets.shape[0]
 
-    for user in range(2):
-        s1 = None
+    if shuffle:
+        indices = np.arange(inputs.shape[0])
+        np.random.shuffle(indices)
 
-        for i in range(max_weeks):
-            _s, state_tim, _ = tim_attn_model(
-                val_tokens[user, i, 1, :, :].transpose(0, 1),
-                val_tokens[user, i, 0, :, :].transpose(0, 1), state_tim)
+    for start_idx in range(0, inputs.shape[0] - batchsize + 1, batchsize):
+        if shuffle:
+            excerpt = indices[start_idx:start_idx + batchsize]
+        else:
+            excerpt = slice(start_idx, start_idx + batchsize)
+        yield inputs[excerpt], targets[excerpt]
 
-            if s1 is None:
-                s1 = _s
-            else:
-                s1 = torch.cat((s1, _s), 0)
-        y_pred_out, state_week_out, _ = week_attn_model(
-            seq_week[user, :, :].transpose(0, 1), s1, state_week)
-        y_preds.append(y_pred_out)
-        state_weeks.append(state_week_out)
 
-    y_pred = mlp_model(torch.cat((y_preds[0], y_preds[1]), dim=1))
-
-    return y_pred
+def gen_minibatch(tokens, labels, mini_batch_size, shuffle=True):
+    for token, label in iterate_minibatches(
+            tokens, labels, mini_batch_size, shuffle=shuffle):
+        token, seq_week = pad_batch(token)
+        yield token.cuda(), seq_week.cuda(), Variable(
+            torch.from_numpy(label), requires_grad=False).float().cuda()
 
 
 def pad_batch(mini_batch):
@@ -318,10 +312,40 @@ def pad_batch(mini_batch):
             torch.from_numpy(week_matrix).permute(1, 0, 2))
 
 
-def test_accuracy_mini_batch(tokens, seq_week, labels, tim_attn, week_attn,
-                             mlp):
+def get_predictions(val_tokens, seq_week, tim_attn_model, week_attn_model,
+                    mlp_model):
+    state_tim = tim_attn_model.init_hidden().cuda()
+    state_week = week_attn_model.init_hidden().cuda()
+    _, max_weeks, _, batch_size, max_tims = val_tokens.size()
+
+    y_preds = []
+    state_weeks = []
+
+    for user in range(2):
+        s1 = None
+
+        for i in range(max_weeks):
+            _s, state_tim, _ = tim_attn_model(
+                val_tokens[user, i, 1, :, :].transpose(0, 1),
+                val_tokens[user, i, 0, :, :].transpose(0, 1), state_tim)
+
+            if s1 is None:
+                s1 = _s
+            else:
+                s1 = torch.cat((s1, _s), 0)
+        y_pred_out, state_week_out, _ = week_attn_model(
+            seq_week[user, :, :].transpose(0, 1), s1, state_week)
+        y_preds.append(y_pred_out)
+        state_weeks.append(state_week_out)
+
+    y_pred = mlp_model(torch.cat((y_preds[0], y_preds[1]), dim=1))
+
+    return y_pred
+
+
+def test_accuracy_mini_batch(tokens, seq_week, labels, tim_attn, week_attn, mlp):
     y_pred = get_predictions(tokens, seq_week, tim_attn, week_attn, mlp)
-    _, y_pred = torch.max(y_pred, 1)
+    y_pred = y_pred - 0.5 > 0
     correct = np.ndarray.flatten(y_pred.data.cpu().numpy())
     labels = np.ndarray.flatten(labels.data.cpu().numpy())
     num_correct = sum(correct == labels)
@@ -338,7 +362,7 @@ def test_accuracy_full_batch(tokens, labels, mini_batch_size, tim_attn,
     for token, seq_week, seq_day, label in g:
         y_pred = get_predictions(tokens.cuda(), seq_week, tim_attn, week_attn,
                                  mlp)
-        _, y_pred = torch.max(y_pred, 1)
+        y_pred = y_pred - 0.5 > 0
         p.append(np.ndarray.flatten(y_pred.data.cpu().numpy()))
         l.append(np.ndarray.flatten(label.data.cpu().numpy()))
     p = [item for sublist in p for item in sublist]
@@ -348,29 +372,6 @@ def test_accuracy_full_batch(tokens, labels, mini_batch_size, tim_attn,
     num_correct = sum(p == l)
 
     return float(num_correct) / len(p)
-
-
-def iterate_minibatches(inputs, targets, batchsize, shuffle=False):
-    assert inputs.shape[0] == targets.shape[0]
-
-    if shuffle:
-        indices = np.arange(inputs.shape[0])
-        np.random.shuffle(indices)
-
-    for start_idx in range(0, inputs.shape[0] - batchsize + 1, batchsize):
-        if shuffle:
-            excerpt = indices[start_idx:start_idx + batchsize]
-        else:
-            excerpt = slice(start_idx, start_idx + batchsize)
-        yield inputs[excerpt], targets[excerpt]
-
-
-def gen_minibatch(tokens, labels, mini_batch_size, shuffle=True):
-    for token, label in iterate_minibatches(
-            tokens, labels, mini_batch_size, shuffle=shuffle):
-        token, seq_week = pad_batch(token)
-        yield token.cuda(), seq_week.cuda(), Variable(
-            torch.from_numpy(label), requires_grad=False).float().cuda()
 
 
 def check_val_loss(val_tokens, val_labels, mini_batch_size, tim_attn_model,
@@ -396,7 +397,6 @@ def timeSince(since):
     s = now - since
     m = math.floor(s / 60)
     s -= m * 60
-
     return '%dm %ds' % (m, s)
 
 
@@ -516,10 +516,10 @@ def train_early_stopping(mini_batch_size,
     return loss_full
 
 
-def train():
+def train(data_path):
     # Loading the data
-    friendship = pd.read_csv('../data/friendship.csv', header=None)
-    with open('../data/traj_data.pkl', 'rb') as f:
+    friendship = pd.read_csv(data_path + 'friendship.csv', header=None)
+    with open(data_path + 'traj_data.pkl', 'rb') as f:
         data = pickle.load(f)
     data_df = []
 
@@ -529,10 +529,6 @@ def train():
         data_df.append([[data[user_id1], data[user_id2]],
                         friendship.iloc[i, 2]])
     data_df = pd.DataFrame(data_df, columns=['tokens', 'rating'])
-
-    # d = pd.read_json('../data/imdb_final.json')
-    # d['rating'] = d['rating'] - 1
-    # d = d[['tokens', 'rating']]
 
     X = data_df.tokens
     y = data_df.rating
@@ -595,4 +591,4 @@ def train():
 
 
 if __name__ == '__main__':
-    train()
+    train('../../../dataset/')
